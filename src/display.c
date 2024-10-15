@@ -323,7 +323,11 @@ PyImaging_GrabScreenWin32(PyObject *self, PyObject *args) {
     int x = 0, y = 0, width, height;
     int includeLayeredWindows = 0, all_screens = 0;
     HBITMAP bitmap;
+#ifndef _WIN32_WCE
     BITMAPCOREHEADER core;
+#else
+    BITMAPINFO bitmapInfo = {0};
+#endif
     HDC screen, screen_copy;
     DWORD rop;
     PyObject *buffer;
@@ -338,9 +342,10 @@ PyImaging_GrabScreenWin32(PyObject *self, PyObject *args) {
     /* step 1: create a memory DC large enough to hold the
        entire screen */
 
-    screen = CreateDC("DISPLAY", NULL, NULL, NULL);
+    screen = CreateDC(TEXT("DISPLAY"), NULL, NULL, NULL);
     screen_copy = CreateCompatibleDC(screen);
 
+#ifndef _WIN32_WCE
     // added in Windows 10 (1607)
     // loaded dynamically to avoid link errors
     user32 = LoadLibraryA("User32.dll");
@@ -350,6 +355,9 @@ PyImaging_GrabScreenWin32(PyObject *self, PyObject *args) {
         // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE = ((DPI_CONTEXT_HANDLE)-3)
         dpiAwareness = SetThreadDpiAwarenessContext_function((HANDLE)-3);
     }
+#else
+    SetThreadDpiAwarenessContext_function = NULL;
+#endif
 
     if (all_screens) {
         x = GetSystemMetrics(SM_XVIRTUALSCREEN);
@@ -365,9 +373,20 @@ PyImaging_GrabScreenWin32(PyObject *self, PyObject *args) {
         SetThreadDpiAwarenessContext_function(dpiAwareness);
     }
 
+#ifndef _WIN32_WCE
     FreeLibrary(user32);
+#endif
 
+#ifndef _WIN32_WCE
     bitmap = CreateCompatibleBitmap(screen, width, height);
+#else
+    buffer = PyBytes_FromStringAndSize(NULL, height * ((width * 3 + 3) & -4));
+    if (!buffer) {
+        return NULL;
+    }
+
+    bitmap = CreateDIBSection(screen, &bitmapInfo, DIB_RGB_COLORS, (void **)&buffer, NULL, 0);
+#endif
     if (!bitmap) {
         goto error;
     }
@@ -388,6 +407,7 @@ PyImaging_GrabScreenWin32(PyObject *self, PyObject *args) {
 
     /* step 3: extract bits from bitmap */
 
+#ifndef _WIN32_WCE
     buffer = PyBytes_FromStringAndSize(NULL, height * ((width * 3 + 3) & -4));
     if (!buffer) {
         return NULL;
@@ -409,6 +429,7 @@ PyImaging_GrabScreenWin32(PyObject *self, PyObject *args) {
         )) {
         goto error;
     }
+#endif
 
     DeleteObject(bitmap);
     DeleteDC(screen_copy);
@@ -435,8 +456,13 @@ PyImaging_GrabClipboardWin32(PyObject *self, PyObject *args) {
     void *data;
     PyObject *result;
     UINT format;
-    UINT formats[] = {CF_DIB, CF_DIBV5, CF_HDROP, RegisterClipboardFormatA("PNG"), 0};
-    LPCSTR format_names[] = {"DIB", "DIB", "file", "png", NULL};
+#ifdef CF_DIBV5
+    UINT formats[] = {CF_DIB, CF_DIBV5, CF_HDROP, RegisterClipboardFormat(TEXT("PNG")), 0};
+    LPCSTR format_names[] = {TEXT("DIB"), TEXT("DIB"), TEXT("file"), TEXT("png"), NULL};
+#else
+    UINT formats[] = {CF_DIB, CF_HDROP, RegisterClipboardFormat(TEXT("PNG")), 0};
+    LPCSTR format_names[] = {TEXT("DIB"), TEXT("file"), TEXT("png"), NULL};
+#endif
 
     if (!OpenClipboard(NULL)) {
         // Maybe the clipboard is temporarily in use by another process.
@@ -454,7 +480,11 @@ PyImaging_GrabClipboardWin32(PyObject *self, PyObject *args) {
     while (!handle && (format = EnumClipboardFormats(format))) {
         for (UINT i = 0; formats[i] != 0; i++) {
             if (format == formats[i]) {
+#ifndef _WIN32_WCE
                 handle = GetClipboardData(format);
+#else
+                handle = GetClipboardDataAlloc(format);
+#endif
                 format = i;
                 break;
             }
@@ -466,12 +496,21 @@ PyImaging_GrabClipboardWin32(PyObject *self, PyObject *args) {
         return Py_BuildValue("zO", NULL, Py_None);
     }
 
+#ifndef _WIN32_WCE
     data = GlobalLock(handle);
     size = GlobalSize(handle);
+#else
+    data = (void *)handle;
+    size = LocalSize(handle);
+#endif
 
     result = PyBytes_FromStringAndSize(data, size);
 
+#ifndef _WIN32_WCE
     GlobalUnlock(handle);
+#else
+    LocalFree(handle);
+#endif
     CloseClipboard();
 
     return Py_BuildValue("zN", format_names[format], result);
@@ -658,7 +697,7 @@ PyImaging_CreateWindowWin32(PyObject *self, PyObject *args) {
     /* windowClass.hbrBackground = (HBRUSH) (COLOR_BTNFACE + 1); */
     windowClass.hbrBackground = NULL;
     windowClass.lpszMenuName = NULL;
-    windowClass.lpszClassName = "pilWindow";
+    windowClass.lpszClassName = TEXT("pilWindow");
     windowClass.lpfnWndProc = windowCallback;
     windowClass.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(1));
     windowClass.hCursor = LoadCursor(NULL, IDC_ARROW); /* CROSS? */
@@ -747,6 +786,7 @@ PyImaging_DrawWmf(PyObject *self, PyObject *args) {
 
     /* step 1: copy metafile contents into METAFILE object */
 
+#ifndef _WIN32_WCE
     if (datasize > 22 && GET32(data, 0) == 0x9ac6cdd7) {
         /* placeable windows metafile (22-byte aldus header) */
         meta = SetWinMetaFileBits(datasize - 22, data + 22, NULL, NULL);
@@ -755,7 +795,9 @@ PyImaging_DrawWmf(PyObject *self, PyObject *args) {
         /* enhanced metafile */
         meta = SetEnhMetaFileBits(datasize, data);
 
-    } else {
+    } else
+#endif
+    {
         /* unknown meta format */
         meta = NULL;
     }
@@ -765,6 +807,7 @@ PyImaging_DrawWmf(PyObject *self, PyObject *args) {
         return NULL;
     }
 
+#ifndef _WIN32_WCE
     /* step 2: create bitmap */
 
     core.bcSize = sizeof(core);
@@ -817,6 +860,7 @@ error:
     DeleteDC(dc);
 
     return buffer;
+#endif
 }
 
 #endif /* _WIN32 */

@@ -29,7 +29,11 @@
 #if defined(_WIN32) || defined(__CYGWIN__) /* WIN */
 
 #define WIN32_LEAN_AND_MEAN
+#ifndef __MINGW32CE__
 #include <Windows.h>
+#else
+#include <windows.h>
+#endif
 
 #ifdef __CYGWIN__
 #undef _WIN64

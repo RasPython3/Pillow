@@ -21,6 +21,8 @@ from typing import Any
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 
+if os.environ.get("BUILDFORWINCE", "1"):
+    sys.platform = "wince"
 
 def get_version() -> str:
     version_file = "src/PIL/_version.py"
@@ -466,7 +468,23 @@ class pil_build_ext(build_ext):
                 sdk_path = commandlinetools_sdk_path
         return sdk_path
 
-    def build_extensions(self) -> None:
+    def build_extensions(self):
+        if sys.platform == "wince":
+            self.plat_name = "wince-arm"
+            cflags = "-march=armv5tej -mcpu=arm926ej-s -Wno-attributes -DWC_NO_BEST_FIT_CHARS -D_WIN32_WCE=0x0600 -D_MAX_PATH=260 -D_UNICODE -DUNICODE -fvisibility=hidden -fno-pic"
+            self.compiler.set_executable("compiler_so", f"arm-mingw32ce-gcc {cflags}")
+            self.compiler.set_executable("compiler_cxx", f"arm-mingw32ce-gcc {cflags}")
+            self.compiler.set_executable("linker_so", f"arm-mingw32ce-gcc -shared ../cpython-wince/python310.dll --enable-auto-import {cflags}")
+            self.compiler.include_dirs = [
+                "../cpython-wince/PC",
+                "../cpython-wince/Include",
+                "../cpython-wince",
+            ]
+            self.compiler.library_dirs = [
+                "../cpython-wince",
+            ]
+            self.compiler.shared_lib_extension = ".cp310-wince_arm.pyd"
+
         library_dirs: list[str] = []
         include_dirs: list[str] = []
 
@@ -544,8 +562,9 @@ class pil_build_ext(build_ext):
                 for d in os.environ[k].split(os.path.pathsep):
                     _add_directory(library_dirs, d)
 
-        _add_directory(library_dirs, os.path.join(sys.prefix, "lib"))
-        _add_directory(include_dirs, os.path.join(sys.prefix, "include"))
+        if sys.platform != "wince":
+            _add_directory(library_dirs, os.path.join(sys.prefix, "lib"))
+            _add_directory(include_dirs, os.path.join(sys.prefix, "include"))
 
         #
         # add platform directories
@@ -879,6 +898,8 @@ class pil_build_ext(build_ext):
             defs.append(("HAVE_XCB", None))
         if sys.platform == "win32":
             libs.extend(["kernel32", "user32", "gdi32"])
+        if sys.platform == "wince":
+            libs.append("coredll")
         if struct.unpack("h", b"\0\1")[0] == 1:
             defs.append(("WORDS_BIGENDIAN", None))
 
@@ -1011,7 +1032,7 @@ ext_modules = [
     Extension("PIL._imagingft", ["src/_imagingft.c"]),
     Extension("PIL._imagingcms", ["src/_imagingcms.c"]),
     Extension("PIL._webp", ["src/_webp.c"]),
-    Extension("PIL._imagingtk", ["src/_imagingtk.c", "src/Tk/tkImaging.c"]),
+    Extension("PIL._imagingtk", ["src/_imagingtk.c", "src/Tk/tkImaging.c"], libraries=([] if sys.platform != "wince" else ["coredll", "toolhelp"])),
     Extension("PIL._imagingmath", ["src/_imagingmath.c"]),
     Extension("PIL._imagingmorph", ["src/_imagingmorph.c"]),
 ]

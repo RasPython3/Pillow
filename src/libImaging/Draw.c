@@ -37,6 +37,11 @@
 #include <math.h>
 #include <stdint.h>
 
+#ifdef _WIN32_WCE
+#define fmin(x, y) ((x < y || isnan(y)) ? x : y)
+#define fmax(x, y) ((x > y || isnan(y)) ? x : y)
+#endif
+
 #define CEIL(v) (int)ceil(v)
 #define FLOOR(v) ((v) >= 0.0 ? (int)(v) : (int)floor(v))
 

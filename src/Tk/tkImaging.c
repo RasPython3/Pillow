@@ -44,6 +44,10 @@
 
 #include <stdlib.h>
 
+#ifdef _WIN32_WCE
+#include <tlhelp32.h>
+#endif
+
 /*
  * Global vars for Tcl / Tk functions.  We load these symbols from the tkinter
  * extension module or loaded Tcl / Tk libraries at run-time.
@@ -246,7 +250,7 @@ _dfunc(HMODULE lib_handle, const char *func_name) {
 
     char message[100];
 
-    FARPROC func = GetProcAddress(lib_handle, func_name);
+    FARPROC func = GetProcAddressA(lib_handle, func_name);
     if (func == NULL) {
         sprintf(message, "Cannot load function %s", func_name);
         PyErr_SetString(PyExc_RuntimeError, message);
@@ -263,7 +267,7 @@ get_tcl(HMODULE hMod) {
      */
 
     if ((TCL_CREATE_COMMAND =
-             (Tcl_CreateCommand_t)GetProcAddress(hMod, "Tcl_CreateCommand")) == NULL) {
+             (Tcl_CreateCommand_t)GetProcAddressA(hMod, "Tcl_CreateCommand")) == NULL) {
         return 0; /* Maybe not Tcl module */
     }
     return ((TCL_APPEND_RESULT =
@@ -280,7 +284,7 @@ get_tk(HMODULE hMod) {
      * functions found.
      */
 
-    FARPROC func = GetProcAddress(hMod, "Tk_PhotoPutBlock");
+    FARPROC func = GetProcAddressA(hMod, "Tk_PhotoPutBlock");
     if (func == NULL) { /* Maybe not Tk module */
         return 0;
     }
@@ -302,10 +306,15 @@ load_tkinter_funcs(void) {
      * Return 0 for success, non-zero for failure.
      */
 
+#ifndef _WIN32_WCE
     HMODULE *hMods = NULL;
     HANDLE hProcess;
     DWORD cbNeeded;
     unsigned int i;
+#else
+    HANDLE hSnapshot;
+    MODULEENTRY32 ModEntry;
+#endif
     int found_tcl = 0;
     int found_tk = 0;
 
@@ -316,6 +325,7 @@ load_tkinter_funcs(void) {
     }
     Py_DECREF(pModule);
 
+#ifndef _WIN32_WCE
     /* Returns pseudo-handle that does not need to be closed */
     hProcess = GetCurrentProcess();
 
@@ -355,6 +365,37 @@ load_tkinter_funcs(void) {
     }
 
     free(hMods);
+#else
+    hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, (DWORD)0);
+
+    if (hSnapshot == INVALID_HANDLE_VALUE) {
+        PyErr_SetFromWindowsErr(0);
+        return 1;
+    }
+
+    ModEntry.dwSize = sizeof(MODULEENTRY32);
+
+    if (Module32First(hSnapshot, &ModEntry)) {
+        do {
+            if (!found_tcl) {
+                found_tcl = get_tcl(ModEntry.hModule);
+                if (found_tcl == -1) {
+                    break;
+                }
+            }
+            if (!found_tk) {
+                found_tk = get_tk(ModEntry.hModule);
+                if (found_tk == -1) {
+                    break;
+                }
+            }
+            if (found_tcl && found_tk) {
+                break;
+            }
+        } while (Module32Next(hSnapshot, &ModEntry));
+    }
+    CloseHandle(hSnapshot);
+#endif
     if (found_tcl == 0) {
         PyErr_SetString(PyExc_RuntimeError, "Could not find Tcl routines");
     } else if (found_tk == 0) {
