@@ -326,14 +326,17 @@ PyImaging_GrabScreenWin32(PyObject *self, PyObject *args) {
 #ifndef _WIN32_WCE
     BITMAPCOREHEADER core;
 #else
+    void *pixelBuffer = NULL;
     BITMAPINFO bitmapInfo = {0};
 #endif
     HDC screen, screen_copy;
     DWORD rop;
     PyObject *buffer;
     HANDLE dpiAwareness;
+#ifndef _WIN32_WCE
     HMODULE user32;
     Func_SetThreadDpiAwarenessContext SetThreadDpiAwarenessContext_function;
+#endif
 
     if (!PyArg_ParseTuple(args, "|ii", &includeLayeredWindows, &all_screens)) {
         return NULL;
@@ -355,8 +358,6 @@ PyImaging_GrabScreenWin32(PyObject *self, PyObject *args) {
         // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE = ((DPI_CONTEXT_HANDLE)-3)
         dpiAwareness = SetThreadDpiAwarenessContext_function((HANDLE)-3);
     }
-#else
-    SetThreadDpiAwarenessContext_function = NULL;
 #endif
 
     if (all_screens) {
@@ -369,23 +370,26 @@ PyImaging_GrabScreenWin32(PyObject *self, PyObject *args) {
         height = GetDeviceCaps(screen, VERTRES);
     }
 
+#ifndef _WIN32_WCE
     if (SetThreadDpiAwarenessContext_function != NULL) {
         SetThreadDpiAwarenessContext_function(dpiAwareness);
     }
 
-#ifndef _WIN32_WCE
     FreeLibrary(user32);
 #endif
 
 #ifndef _WIN32_WCE
     bitmap = CreateCompatibleBitmap(screen, width, height);
 #else
-    buffer = PyBytes_FromStringAndSize(NULL, height * ((width * 3 + 3) & -4));
-    if (!buffer) {
-        return NULL;
-    }
+    bitmapInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bitmapInfo.bmiHeader.biWidth = width;
+    bitmapInfo.bmiHeader.biHeight = height;
+    bitmapInfo.bmiHeader.biPlanes = 1;
+    bitmapInfo.bmiHeader.biBitCount = 24;
+    bitmapInfo.bmiHeader.biCompression = BI_RGB;
+    bitmapInfo.bmiHeader.biSizeImage = height * ((width * 3 + 3) & -4);
 
-    bitmap = CreateDIBSection(screen, &bitmapInfo, DIB_RGB_COLORS, (void **)&buffer, NULL, 0);
+    bitmap = CreateDIBSection(screen, &bitmapInfo, DIB_RGB_COLORS, (void **)&pixelBuffer, NULL, 0);
 #endif
     if (!bitmap) {
         goto error;
@@ -407,12 +411,12 @@ PyImaging_GrabScreenWin32(PyObject *self, PyObject *args) {
 
     /* step 3: extract bits from bitmap */
 
-#ifndef _WIN32_WCE
     buffer = PyBytes_FromStringAndSize(NULL, height * ((width * 3 + 3) & -4));
     if (!buffer) {
         return NULL;
     }
 
+#ifndef _WIN32_WCE
     core.bcSize = sizeof(core);
     core.bcWidth = width;
     core.bcHeight = height;
@@ -429,6 +433,8 @@ PyImaging_GrabScreenWin32(PyObject *self, PyObject *args) {
         )) {
         goto error;
     }
+#else
+    memcpy(PyBytes_AS_STRING(buffer), pixelBuffer, (size_t)bitmapInfo.bmiHeader.biSizeImage);
 #endif
 
     DeleteObject(bitmap);
