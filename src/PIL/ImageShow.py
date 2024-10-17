@@ -151,7 +151,7 @@ class WindowsViewer(Viewer):
         return 1
 
 
-if sys.platform == "win32":
+if sys.platform in ("win32", "wince"):
     register(WindowsViewer)
 
 
@@ -322,7 +322,7 @@ class XVViewer(UnixViewer):
         return 1
 
 
-if sys.platform not in ("win32", "darwin"):  # unixoids
+if sys.platform not in ("win32", "wince", "darwin"):  # unixoids
     if shutil.which("xdg-open"):
         register(XDGViewer)
     if shutil.which("display"):

@@ -50,7 +50,7 @@ def grab(
                 im.close()
                 return im_resized
             return im
-        elif sys.platform == "win32":
+        elif sys.platform in ("win32", "wince"):
             offset, size, data = Image.core.grabscreen_win32(
                 include_layered_windows, all_screens
             )
@@ -79,7 +79,7 @@ def grab(
     except OSError:
         if (
             display_name is None
-            and sys.platform not in ("darwin", "win32")
+            and sys.platform not in ("darwin", "win32", "wince")
             and shutil.which("gnome-screenshot")
         ):
             fh, filepath = tempfile.mkstemp(".png")
@@ -126,7 +126,7 @@ def grabclipboard() -> Image.Image | list[str] | None:
             im.load()
         os.unlink(filepath)
         return im
-    elif sys.platform == "win32":
+    elif sys.platform in ("win32", "wince"):
         fmt, data = Image.core.grabclipboard_win32()
         if fmt == "file":  # CF_HDROP
             import struct

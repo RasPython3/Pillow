@@ -139,5 +139,5 @@ def createProfile(
     color_space: Literal["LAB", "XYZ", "sRGB"], color_temp: SupportsFloat = 0.0, /
 ) -> CmsProfile: ...
 
-if sys.platform == "win32":
+if sys.platform in ("win32", "wince"):
     def get_display_profile_win32(handle: int = 0, is_dc: int = 0, /) -> str | None: ...

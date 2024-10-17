@@ -271,7 +271,7 @@ class FreeTypeFont:
 
         if is_path(font):
             font = os.path.realpath(os.fspath(font))
-            if sys.platform == "win32":
+            if sys.platform in ("win32", "wince"):
                 font_bytes_path = font if isinstance(font, bytes) else font.encode()
                 try:
                     font_bytes_path.decode("ascii")
@@ -883,7 +883,7 @@ def truetype(
         ttf_filename = os.path.basename(font)
 
         dirs = []
-        if sys.platform == "win32":
+        if sys.platform in ("win32", "wince"):
             # check the windows font repository
             # NOTE: must use uppercase WINDIR, to work around bugs in
             # 1.5.2's os.environ.get()
