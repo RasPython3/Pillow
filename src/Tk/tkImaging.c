@@ -53,10 +53,14 @@
  * extension module or loaded Tcl / Tk libraries at run-time.
  */
 static Tcl_CreateCommand_t TCL_CREATE_COMMAND;
+static Tcl_GetVersion_t TCL_GET_VERSION;
 static Tcl_AppendResult_t TCL_APPEND_RESULT;
 static Tk_FindPhoto_t TK_FIND_PHOTO;
 static Tk_PhotoGetImage_t TK_PHOTO_GET_IMAGE;
 static Tk_PhotoPutBlock_t TK_PHOTO_PUT_BLOCK;
+static Tk_PhotoPutBlock_Tk84_t TK_PHOTO_PUT_BLOCK_TK84;
+
+static int major_ver, minor_ver, patchlevel_ver, release_type_ver;
 
 static Imaging
 ImagingFind(const char *name) {
@@ -148,9 +152,15 @@ PyImagingPhotoPut(
     block.pitch = im->linesize;
     block.pixelPtr = (unsigned char *)im->block;
 
-    TK_PHOTO_PUT_BLOCK(
-        interp, photo, &block, 0, 0, block.width, block.height, TK_PHOTO_COMPOSITE_SET
-    );
+    if (major_ver == 8 && minor_ver == 4) {
+        TK_PHOTO_PUT_BLOCK_TK84(
+            photo, &block, 0, 0, block.width, block.height, TK_PHOTO_COMPOSITE_SET
+        );
+    } else {
+        TK_PHOTO_PUT_BLOCK(
+            interp, photo, &block, 0, 0, block.width, block.height, TK_PHOTO_COMPOSITE_SET
+        );
+    }
 
     return TCL_OK;
 }
@@ -270,6 +280,10 @@ get_tcl(HMODULE hMod) {
              (Tcl_CreateCommand_t)GetProcAddressA(hMod, "Tcl_CreateCommand")) == NULL) {
         return 0; /* Maybe not Tcl module */
     }
+    if ((TCL_GET_VERSION = (Tcl_GetVersion_t)_dfunc(hMod, "Tcl_GetVersion")) ==
+        NULL) {
+        return -1;
+    };
     return ((TCL_APPEND_RESULT =
                  (Tcl_AppendResult_t)_dfunc(hMod, "Tcl_AppendResult")) == NULL)
                ? -1
@@ -296,6 +310,7 @@ get_tk(HMODULE hMod) {
         return -1;
     };
     TK_PHOTO_PUT_BLOCK = (Tk_PhotoPutBlock_t)func;
+    TK_PHOTO_PUT_BLOCK_TK84 = (Tk_PhotoPutBlock_Tk84_t)func;
     return 1;
 }
 
@@ -400,6 +415,8 @@ load_tkinter_funcs(void) {
         PyErr_SetString(PyExc_RuntimeError, "Could not find Tcl routines");
     } else if (found_tk == 0) {
         PyErr_SetString(PyExc_RuntimeError, "Could not find Tk routines");
+    } else {
+        TCL_GET_VERSION(&major_ver, &minor_ver, &patchlevel_ver, &release_type_ver);
     }
     return (int)((found_tcl != 1) || (found_tk != 1));
 }
@@ -444,6 +461,11 @@ _func_loader(void *lib) {
         NULL) {
         return 1;
     }
+    if ((TCL_GET_VERSION = (Tcl_GetVersion_t)_dfunc(hMod, "Tcl_GetVersion")) ==
+        NULL) {
+        return 1;
+    }
+    TCL_GET_VERSION(&major_ver, &minor_ver, &patchlevel_ver, &release_type_ver);
     if ((TCL_APPEND_RESULT = (Tcl_AppendResult_t)_dfunc(lib, "Tcl_AppendResult")) ==
         NULL) {
         return 1;
@@ -455,10 +477,17 @@ _func_loader(void *lib) {
     if ((TK_FIND_PHOTO = (Tk_FindPhoto_t)_dfunc(lib, "Tk_FindPhoto")) == NULL) {
         return 1;
     }
-    return (
-        (TK_PHOTO_PUT_BLOCK = (Tk_PhotoPutBlock_t)_dfunc(lib, "Tk_PhotoPutBlock")) ==
-        NULL
-    );
+    if (major_ver == 8 && minor_ver == 4) {
+        return (
+            (TK_PHOTO_PUT_BLOCK_TK84 = (Tk_PhotoPutBlock_Tk84_t)_dfunc(lib, "Tk_PhotoPutBlock")) ==
+            NULL
+        );
+    } else {
+        return (
+            (TK_PHOTO_PUT_BLOCK = (Tk_PhotoPutBlock_t)_dfunc(lib, "Tk_PhotoPutBlock")) ==
+            NULL
+        );
+    }
 }
 
 int

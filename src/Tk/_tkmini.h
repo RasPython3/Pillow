@@ -93,6 +93,13 @@ typedef Tcl_Command (*Tcl_CreateCommand_t)(
     ClientData clientData,
     Tcl_CmdDeleteProc *deleteProc
 );
+/* Tcl_GetVersion */
+typedef void (*Tcl_GetVersion_t)(
+    int *major,
+    int *minor,
+    int *patchlevel,
+    int *type
+);
 /* Tcl_AppendResult */
 typedef void (*Tcl_AppendResult_t)(Tcl_Interp *interp, ...);
 
@@ -123,6 +130,16 @@ typedef struct Tk_PhotoImageBlock {
 /* Typedefs derived from function signatures in Tk header */
 typedef int (*Tk_PhotoPutBlock_t)(
     Tcl_Interp *interp,
+    Tk_PhotoHandle handle,
+    Tk_PhotoImageBlock *blockPtr,
+    int x,
+    int y,
+    int width,
+    int height,
+    int compRule
+);
+/* Tk 8.4's TK_PhotoPutBlock did not take interp */
+typedef int (*Tk_PhotoPutBlock_Tk84_t)(
     Tk_PhotoHandle handle,
     Tk_PhotoImageBlock *blockPtr,
     int x,
