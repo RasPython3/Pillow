@@ -468,7 +468,7 @@ class pil_build_ext(build_ext):
                 sdk_path = commandlinetools_sdk_path
         return sdk_path
 
-    def build_extensions(self):
+    def build_extensions(self) -> None:
         if sys.platform == "wince":
             self.plat_name = "wince-arm"
             cflags = "-march=armv5tej -mcpu=arm926ej-s -Wno-attributes -DWC_NO_BEST_FIT_CHARS -D_WIN32_WCE=0x0600 -D_MAX_PATH=260 -D_UNICODE -DUNICODE -fvisibility=hidden -fno-pic"
