@@ -464,10 +464,10 @@ PyImaging_GrabClipboardWin32(PyObject *self, PyObject *args) {
     UINT format;
 #ifdef CF_DIBV5
     UINT formats[] = {CF_DIB, CF_DIBV5, CF_HDROP, RegisterClipboardFormat(TEXT("PNG")), 0};
-    LPCSTR format_names[] = {TEXT("DIB"), TEXT("DIB"), TEXT("file"), TEXT("png"), NULL};
+    LPCTSTR format_names[] = {TEXT("DIB"), TEXT("DIB"), TEXT("file"), TEXT("png"), NULL};
 #else
     UINT formats[] = {CF_DIB, CF_HDROP, RegisterClipboardFormat(TEXT("PNG")), 0};
-    LPCSTR format_names[] = {TEXT("DIB"), TEXT("file"), TEXT("png"), NULL};
+    LPCTSTR format_names[] = {TEXT("DIB"), TEXT("file"), TEXT("png"), NULL};
 #endif
 
     if (!OpenClipboard(NULL)) {
@@ -681,7 +681,7 @@ PyImaging_CreateWindowWin32(PyObject *self, PyObject *args) {
     HWND wnd;
     WNDCLASS windowClass;
 
-    char *title;
+    LPCTSTR title;
     PyObject *callback;
     int width = 0, height = 0;
     if (!PyArg_ParseTuple(args, "sO|ii", &title, &callback, &width, &height)) {
